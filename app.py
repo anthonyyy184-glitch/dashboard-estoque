@@ -53,17 +53,15 @@ if arquivo_subido is not None:
 else:
     df = pd.read_csv("Base_Tabular_SQL.csv")
 
-# --- DESMANTELANDO QUALQUER MULTIINDEX OU DUPLICATA CORPORATIVA ---
-# Se o Excel veio bagunçado com sub-cabeçalhos, isso joga tudo para texto simples
+# --- DESMANTELANDO QUALQUER MULTIINDEX OU DUPLICATA ---
 if isinstance(df.columns, pd.MultiIndex):
     df.columns = ['_'.join(str(i) for i in col).strip() for col in df.columns.values]
 else:
     df.columns = [str(col).strip() for col in df.columns]
 
-# Criamos um DataFrame zerado e limpo para receber apenas o que importa
 df_limpo = pd.DataFrame()
 
-# Buscando as colunas de forma cirúrgica e isolando como séries unidimensionais puras
+# Buscando as colunas de forma cirúrgica (Adicionada detecção de Nota Fiscal)
 for col in df.columns:
     col_lower = col.lower()
     if 'ent' in col_lower and 'Entrada' not in df_limpo.columns:
@@ -76,14 +74,17 @@ for col in df.columns:
         df_limpo['Produtor'] = df.iloc[:, df.columns.get_loc(col)].astype(str).str.strip()
     elif ('cat' in col_lower or 'cult' in col_lower) and 'Categoria' not in df_limpo.columns:
         df_limpo['Categoria'] = df.iloc[:, df.columns.get_loc(col)].astype(str).str.strip()
+    elif ('not' in col_lower or 'nf' in col_lower or 'doc' in col_lower or 'num' in col_lower) and 'Nota_Fiscal' not in df_limpo.columns:
+        df_limpo['Nota_Fiscal'] = df.iloc[:, df.columns.get_loc(col)].astype(str).str.strip()
 
 # Se faltou alguma coluna essencial, criamos do zero na marra
 if 'Entrada' not in df_limpo.columns: df_limpo['Entrada'] = 0.0
 if 'Saída' not in df_limpo.columns: df_limpo['Saída'] = 0.0
 if 'Produtor' not in df_limpo.columns: df_limpo['Produtor'] = 'Não Informado'
 if 'Categoria' not in df_limpo.columns: df_limpo['Categoria'] = 'Não Informado'
+if 'Nota_Fiscal' not in df_limpo.columns: df_limpo['Nota_Fiscal'] = 'Não Informado'
 
-# Tratamento final do tempo baseado na nova tabela ultralimpa
+# Tratamento final do tempo
 if 'Data' in df_limpo.columns:
     df_limpo["Data_Tratada"] = pd.to_datetime(df_limpo["Data"], errors='coerce')
     if df_limpo["Data_Tratada"].isna().all():
@@ -92,17 +93,16 @@ if 'Data' in df_limpo.columns:
 else:
     df_limpo["Ano_Mes"] = "Sem Data"
 
-# Substitui o df original pelo df_limpo purificado
 df = df_limpo
 
-# --- FILTRO INTEGRADO ---
+# --- FILTRO INTEGRADO NA BARRA LATERAL ---
 st.sidebar.markdown("---")
 categorias = ["Todas as Categorias"] + list(df["Categoria"].dropna().unique())
 cat_sel = st.sidebar.selectbox("Filtrar Cultura:", categorias)
 if cat_sel != "Todas as Categorias":
     df = df[df["Categoria"] == cat_sel]
 
-# Cálculos de Performance
+# Cálculos Globais de Performance
 total_entradas = df["Entrada"].sum()
 total_saidas = df["Saída"].sum()
 saldo_estoque = total_entradas - total_saidas
@@ -117,8 +117,8 @@ with col3:
     cor_saldo = "#10B981" if saldo_estoque >= 0 else "#EF4444"
     st.markdown(f"""<div class='kpi-box' style='border-left-color: {cor_saldo};'><div class='kpi-title'>Saldo em Estoque</div><div class='kpi-value'>{saldo_estoque:,.0f} Kg</div></div>""".replace(",", "."), unsafe_allow_html=True)
 
-# Abas de Navegação Módula
-aba_painel, aba_dados = st.tabs(["📊 DASHBOARD ANALÍTICO", "📋 BASE DE DADOS TABULAR"])
+# --- TRÊS ABAS DE NAVEGAÇÃO ---
+aba_painel, aba_notas, aba_dados = st.tabs(["📊 DASHBOARD ANALÍTICO", "🧾 AUDITORIA DE NOTAS FISCAIS", "📋 BASE DE DADOS TABULAR"])
 
 with aba_painel:
     # Gráfico de Rosca
@@ -128,8 +128,7 @@ with aba_painel:
     fig_rosca.update_traces(textposition='inside', textinfo='percent')
     fig_rosca.update_layout(title="Divisão por Categoria de Operação", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
-    # Gráfico de Barras - Agora usando agregação manual ultra segura
-    # Convertemos para dicionário primeiro para garantir 1D absoluto
+    # Gráfico de Barras
     dict_produtores = df.groupby("Produtor")["Entrada"].sum().to_dict()
     top_produtores = pd.DataFrame(list(dict_produtores.items()), columns=["Produtor", "Entrada"])
     top_produtores = top_produtores[~top_produtores["Produtor"].astype(str).str.lower().str.contains("estoque|fato|não informado|nan", na=True)]
@@ -150,12 +149,44 @@ with aba_painel:
         fig_linha.add_trace(go.Scatter(x=df_temporal["Ano_Mes"], y=df_temporal["Saída"], mode='lines+markers', name='Saídas', line=dict(color='#EF4444', width=3)))
     fig_linha.update_layout(title="Fluxo de Carga Mensal (Evolução)", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"))
 
-    # Layout em Linhas Limpas
     c1, c2 = st.columns(2)
     with c1: st.plotly_chart(fig_rosca, use_container_width=True)
     with c2: st.plotly_chart(fig_barras, use_container_width=True)
     st.markdown("---")
     st.plotly_chart(fig_linha, use_container_width=True)
+
+# --- NOVA ABA: AUDITORIA DE NOTAS FISCAIS ---
+with aba_notas:
+    st.markdown("<h3 style='color: #FFFFFF;'>🧾 Central de Rastreamento de Notas Fiscais</h3>", unsafe_allow_html=True)
+    st.markdown("Pesquise e audite movimentações específicas por número de documento ou produtor.")
+    
+    # Caixa de busca interativa
+    busca = st.text_input("🔍 Digite o número da NF ou nome do Produtor para rastrear:", "")
+    
+    df_notas = df.copy()
+    if busca:
+        df_notas = df_notas[
+            (df_notas["Nota_Fiscal"].astype(str).str.contains(busca, case=False)) | 
+            (df_notas["Produtor"].astype(str).str.contains(busca, case=False))
+        ]
+    
+    # KPIs da busca específica
+    nf_entradas = df_notas["Entrada"].sum()
+    nf_saidas = df_notas["Saída"].sum()
+    nf_total_docs = df_notas["Nota_Fiscal"].nunique() if 'Nota_Fiscal' in df_notas.columns else 0
+    
+    c_nf1, c_nf2, c_nf3 = st.columns(3)
+    with c_nf1:
+        st.metric("Documentos Encontrados", f"{nf_total_docs}")
+    with c_nf2:
+        st.metric("Volume de Entrada Localizado", f"{nf_entradas:,.0f} Kg".replace(",", "."))
+    with c_nf3:
+        st.metric("Volume de Saída Localizado", f"{nf_saidas:,.0f} Kg".replace(",", "."))
+        
+    st.markdown("#### Histórico de Lançamentos Vinculados")
+    # Organiza colunas para exibição limpa
+    colunas_exibir = [c for c in ["Data", "Nota_Fiscal", "Produtor", "Categoria", "Entrada", "Saída"] if c in df_notas.columns]
+    st.dataframe(df_notas[colunas_exibir], use_container_width=True)
 
 with aba_dados:
     st.dataframe(df, use_container_width=True)
