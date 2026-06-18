@@ -32,9 +32,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Título Corporativo Elegante
-st.markdown("<h2 style='color: #FFFFFF; font-family: Arial, sans-serif; font-weight: 700; margin-bottom: 5px;'>📊 CONTROL PANEL</h2>", unsafe_allow_html=True)
-st.markdown("<p style='color: #9CA3AF; margin-bottom: 25px;'>Sistema Integrado de Monitoramento de Cargas e Saldo de Estoque</p>", unsafe_allow_html=True)
+# Novo Título Corporativo e Elegante (Sem "Control Panel")
+st.markdown("<h2 style='color: #FFFFFF; font-family: Arial, sans-serif; font-weight: 700; margin-bottom: 5px;'>📈 Painel de Monitoramento de Logística</h2>", unsafe_allow_html=True)
+st.markdown("<p style='color: #9CA3AF; margin-bottom: 25px;'>Acompanhamento de Movimentações, Saldos e Distribuição de Culturas</p>", unsafe_allow_html=True)
 
 # --- REPOSITÓRIO DE DADOS ---
 arquivo_subido = st.sidebar.file_uploader("📥 Upload de Nova Base (.csv ou .xlsx)", type=["csv", "xlsx"])
@@ -76,13 +76,13 @@ with col3:
     st.markdown(f"""<div class='kpi-box' style='border-left-color: {cor_saldo};'><div class='kpi-title'>Saldo em Estoque</div><div class='kpi-value'>{saldo_estoque:,.0f} Kg</div></div>""".replace(",", "."), unsafe_allow_html=True)
 
 # Abas de Navegação Módula
-aba_painel, aba_dados = st.tabs(["📊 DASHBOARD ANÁLITICO", "📋 BASE DE DADOS TABULAR"])
+aba_painel, aba_dados = st.tabs(["📊 DASHBOARD ANALÍTICO", "📋 BASE DE DADOS TABULAR"])
 
 with aba_painel:
-    # Ajustando Gráficos para o tema Escuro Dark Clean
+    # Correção da paleta de cores aplicada aqui (Pastel)
     df_contagem = df["Categoria"].value_counts().reset_index()
     df_contagem.columns = ["Categoria", "Qtd"]
-    fig_rosca = px.pie(df_contagem, names="Categoria", values="Qtd", hole=0.6, color_discrete_sequence=px.colors.qualitative.Muted)
+    fig_rosca = px.pie(df_contagem, names="Categoria", values="Qtd", hole=0.6, color_discrete_sequence=px.colors.qualitative.Pastel)
     fig_rosca.update_traces(textposition='inside', textinfo='percent')
     fig_rosca.update_layout(title="Divisão por Categoria de Operação", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
