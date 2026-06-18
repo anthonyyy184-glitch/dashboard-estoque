@@ -3,102 +3,107 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# 1. Configuração da Página Web (Modo Amplo)
-st.set_page_config(page_title="Dashboard de Estoque", layout="wide")
+# Configuração da Página
+st.set_page_config(page_title="Gestão de Estoque", layout="wide")
 
-# Título limpo e profissional
-st.markdown("<h1 style='text-align: center; color: #FFFFFF; font-family: Arial, sans-serif;'>📊 Painel de Controle de Estoque</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #9A9A9A;'>Gestão de Movimentações, Entradas e Saídas de Culturas</p>", unsafe_allow_html=True)
-st.markdown("---")
+# Estilização CSS para criar blocos modernos e limpos (Cards)
+st.markdown("""
+    <style>
+    .kpi-box {
+        background-color: #1F2937;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #3B82F6;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+        margin-bottom: 20px;
+    }
+    .kpi-title {
+        color: #9CA3AF;
+        font-size: 14px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    .kpi-value {
+        color: #FFFFFF;
+        font-size: 28px;
+        font-weight: bold;
+        margin-top: 5px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# --- BARRA LATERAL OPERACIONAL ---
-st.sidebar.markdown("<h2 style='color: #FFFFFF;'>🔄 Gestão de Dados</h2>", unsafe_allow_html=True)
-arquivo_subido = st.sidebar.file_uploader("📥 Atualizar Base de Dados (.csv ou .xlsx)", type=["csv", "xlsx"])
+# Título Corporativo Elegante
+st.markdown("<h2 style='color: #FFFFFF; font-family: Arial, sans-serif; font-weight: 700; margin-bottom: 5px;'>📊 CONTROL PANEL</h2>", unsafe_allow_html=True)
+st.markdown("<p style='color: #9CA3AF; margin-bottom: 25px;'>Sistema Integrado de Monitoramento de Cargas e Saldo de Estoque</p>", unsafe_allow_html=True)
 
-# Lógica de carregamento de dados
+# --- REPOSITÓRIO DE DADOS ---
+arquivo_subido = st.sidebar.file_uploader("📥 Upload de Nova Base (.csv ou .xlsx)", type=["csv", "xlsx"])
+
 if arquivo_subido is not None:
     try:
-        if arquivo_subido.name.endswith('.csv'):
-            df = pd.read_csv(arquivo_subido)
-        else:
-            df = pd.read_excel(arquivo_subido)
-        st.sidebar.success("Dados atualizados!")
-    except Exception as e:
-        st.sidebar.error(f"Erro ao carregar dados: {e}")
+        df = pd.read_csv(arquivo_subido) if arquivo_subido.name.endswith('.csv') else pd.read_excel(arquivo_subido)
+    except:
         df = pd.read_csv("Base_Tabular_SQL.csv")
 else:
     df = pd.read_csv("Base_Tabular_SQL.csv")
 
-# --- TRATAMENTO DOS DADOS ---
+# Tratamento célere
 df["Entrada"] = pd.to_numeric(df["Entrada"], errors='coerce').fillna(0)
 df["Saída"] = pd.to_numeric(df["Saída"], errors='coerce').fillna(0)
 df["Data_Tratada"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors='coerce')
 df["Ano_Mes"] = df["Data_Tratada"].dt.to_period("M").astype(str)
 
-# --- FILTRO SIMPLES ---
+# Filtro integrado na barra lateral
+st.sidebar.markdown("---")
 categorias = ["Todas as Categorias"] + list(df["Categoria"].dropna().unique())
-cat_sel = st.sidebar.selectbox("🎯 Filtrar por Categoria:", categorias)
-
+cat_sel = st.sidebar.selectbox("Filtrar Cultura:", categorias)
 if cat_sel != "Todas as Categorias":
     df = df[df["Categoria"] == cat_sel]
 
-# --- RESUMO DOS KPIS ---
+# Cálculos de Performance
 total_entradas = df["Entrada"].sum()
 total_saidas = df["Saída"].sum()
 saldo_estoque = total_entradas - total_saidas
 
-# Cards de destaque objetivos
+# --- EXIBIÇÃO DOS CARDS PREMIUM ---
 col1, col2, col3 = st.columns(3)
-col1.metric("📦 ENTRADAS TOTAIS (KG)", f"{total_entradas:,.0f}".replace(",", "."))
-col2.metric("🚚 SAÍDAS TOTAIS (KG)", f"{total_saidas:,.0f}".replace(",", "."))
-col3.metric("⚖️ SALDO EM ESTOQUE (KG)", f"{saldo_estoque:,.0f}".replace(",", "."), 
-            delta="ESTOQUE DISPONÍVEL" if saldo_estoque >= 0 else "ESTOQUE NEGATIVO", delta_color="normal" if saldo_estoque >= 0 else "inverse")
+with col1:
+    st.markdown(f"""<div class='kpi-box'><div class='kpi-title'>Volume de Entradas</div><div class='kpi-value'>{total_entradas:,.0f} Kg</div></div>""".replace(",", "."), unsafe_allow_html=True)
+with col2:
+    st.markdown(f"""<div class='kpi-box' style='border-left-color: #EF4444;'><div class='kpi-title'>Volume de Saídas</div><div class='kpi-value'>{total_saidas:,.0f} Kg</div></div>""".replace(",", "."), unsafe_allow_html=True)
+with col3:
+    cor_saldo = "#10B981" if saldo_estoque >= 0 else "#EF4444"
+    st.markdown(f"""<div class='kpi-box' style='border-left-color: {cor_saldo};'><div class='kpi-title'>Saldo em Estoque</div><div class='kpi-value'>{saldo_estoque:,.0f} Kg</div></div>""".replace(",", "."), unsafe_allow_html=True)
 
-st.markdown("---")
+# Abas de Navegação Módula
+aba_painel, aba_dados = st.tabs(["📊 DASHBOARD ANÁLITICO", "📋 BASE DE DADOS TABULAR"])
 
-# --- ABAS DE NAVEGAÇÃO COMPATÍVEIS COM CELULAR ---
-aba_graficos, aba_tabela = st.tabs(["📊 Visão Geral do Painel", "📋 Tabela de Dados Brutos"])
-
-with aba_graficos:
-    # 1. Gráfico de Rosca (Cores Limpas e Modernas)
+with aba_painel:
+    # Ajustando Gráficos para o tema Escuro Dark Clean
     df_contagem = df["Categoria"].value_counts().reset_index()
-    df_contagem.columns = ["Categoria", "Quantidade de Registros"]
-    fig_rosca = px.pie(df_contagem, names="Categoria", values="Quantidade de Registros", hole=0.5, 
-                       color_discrete_sequence=px.colors.qualitative.T10) # Cores sólidas e corporativas
-    fig_rosca.update_traces(textposition='inside', textinfo='percent+label')
-    fig_rosca.update_layout(title="Volume de Movimentações por Categoria", template="plotly_dark")
+    df_contagem.columns = ["Categoria", "Qtd"]
+    fig_rosca = px.pie(df_contagem, names="Categoria", values="Qtd", hole=0.6, color_discrete_sequence=px.colors.qualitative.Muted)
+    fig_rosca.update_traces(textposition='inside', textinfo='percent')
+    fig_rosca.update_layout(title="Divisão por Categoria de Operação", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
-    # 2. Gráfico de Barras (Top Fornecedores)
     top_produtores = df.groupby("Produtor")["Entrada"].sum().reset_index()
     top_produtores = top_produtores[~top_produtores["Produtor"].str.lower().str.contains("estoque|fato", na=True)]
     top_produtores = top_produtores.sort_values(by="Entrada", ascending=False).head(5)
-    fig_barras = px.bar(top_produtores, x="Entrada", y="Produtor", orientation='h', 
-                        color="Entrada", color_continuous_scale="Blues") # Degradê de azul bem elegante
-    fig_barras.update_layout(yaxis={'categoryorder':'total ascending'}, coloraxis_showscale=False, 
-                             title="Top 5 Fornecedores Líderes (Kg)", template="plotly_dark")
+    fig_barras = px.bar(top_produtores, x="Entrada", y="Produtor", orientation='h', color_discrete_sequence=["#3B82F6"])
+    fig_barras.update_layout(yaxis={'categoryorder':'total ascending'}, title="Top 5 Fornecedores Líderes (Kg)", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
-    # 3. Gráfico de Linhas (Evolução Temporal)
     df_temporal = df[df["Ano_Mes"] != "NaT"].groupby("Ano_Mes")[["Entrada", "Saída"]].sum().reset_index().sort_values("Ano_Mes")
     fig_linha = go.Figure()
-    # Linha Verde para Entradas
-    fig_linha.add_trace(go.Scatter(x=df_temporal["Ano_Mes"], y=df_temporal["Entrada"], mode='lines+markers', 
-                                   name='Entradas (Kg)', line=dict(color='#2ECC71', width=3)))
-    # Linha Vermelha para Saídas
-    fig_linha.add_trace(go.Scatter(x=df_temporal["Ano_Mes"], y=df_temporal["Saída"], mode='lines+markers', 
-                                   name='Saídas (Kg)', line=dict(color='#E74C3C', width=3)))
-    fig_linha.update_layout(title="Evolução Mensal (Fluxo de Carga)", template="plotly_dark",
-                            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5))
+    fig_linha.add_trace(go.Scatter(x=df_temporal["Ano_Mes"], y=df_temporal["Entrada"], mode='lines+markers', name='Entradas', line=dict(color='#10B981', width=3)))
+    fig_linha.add_trace(go.Scatter(x=df_temporal["Ano_Mes"], y=df_temporal["Saída"], mode='lines+markers', name='Saídas', line=dict(color='#EF4444', width=3)))
+    fig_linha.update_layout(title="Fluxo de Carga Mensal (Evolução)", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"))
 
-    # Renderização responsiva (lado a lado no PC, empilhado no celular)
+    # Layout em Linhas Limpas
     c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(fig_rosca, use_container_width=True)
-    with c2:
-        st.plotly_chart(fig_barras, use_container_width=True)
-        
+    with c1: st.plotly_chart(fig_rosca, use_container_width=True)
+    with c2: st.plotly_chart(fig_barras, use_container_width=True)
     st.markdown("---")
     st.plotly_chart(fig_linha, use_container_width=True)
 
-with aba_tabela:
-    st.markdown("<h3 style='color: #FFFFFF;'>📋 Dados Consolidados</h3>", unsafe_allow_html=True)
+with aba_dados:
     st.dataframe(df, use_container_width=True)
