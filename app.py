@@ -32,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Novo Título Corporativo e Elegante
+# Título Corporativo e Elegante
 st.markdown("<h2 style='color: #FFFFFF; font-family: Arial, sans-serif; font-weight: 700; margin-bottom: 5px;'>📈 Painel de Monitoramento de Logística</h2>", unsafe_allow_html=True)
 st.markdown("<p style='color: #9CA3AF; margin-bottom: 25px;'>Acompanhamento de Movimentações, Saldos e Distribuição de Culturas</p>", unsafe_allow_html=True)
 
@@ -53,69 +53,49 @@ if arquivo_subido is not None:
 else:
     df = pd.read_csv("Base_Tabular_SQL.csv")
 
-# --- BLINDAGEM CONTRA COLUNAS REPETIDAS ---
-# Remove espaços extras dos nomes das colunas
-df.columns = df.columns.str.strip()
+# --- DESMANTELANDO QUALQUER MULTIINDEX OU DUPLICATA CORPORATIVA ---
+# Se o Excel veio bagunçado com sub-cabeçalhos, isso joga tudo para texto simples
+if isinstance(df.columns, pd.MultiIndex):
+    df.columns = ['_'.join(str(i) for i in col).strip() for col in df.columns.values]
+else:
+    df.columns = [str(col).strip() for col in df.columns]
 
-# Renomeia colunas duplicadas na marra para não bugar o Pandas (ex: Produtor, Produtor_repetida_1)
-novos_nomes = []
-contagem_nomes = {}
-for col in df.columns:
-    if col in contagem_nomes:
-        contagem_nomes[col] += 1
-        novos_nomes.append(f"{col}_repetida_{contagem_nomes[col]}")
-    else:
-        contagem_nomes[col] = 0
-        novos_nomes.append(col)
-df.columns = novos_nomes
+# Criamos um DataFrame zerado e limpo para receber apenas o que importa
+df_limpo = pd.DataFrame()
 
-# --- MAPEAMENTO E TRADUTOR INTELIGENTE ---
-mapeamento_colunas = {}
-colunas_identificadas = set()
-
+# Buscando as colunas de forma cirúrgica e isolando como séries unidimensionais puras
 for col in df.columns:
     col_lower = col.lower()
-    # Só mapeia se for a PRIMEIRA vez que encontra o termo e se não for uma coluna já marcada como repetida
-    if 'repetida' in col_lower:
-        continue
-        
-    if 'ent' in col_lower and 'Entrada' not in colunas_identificadas:
-        mapeamento_colunas[col] = 'Entrada'
-        colunas_identificadas.add('Entrada')
-    elif ('sa' in col_lower or 'sai' in col_lower) and 'Saída' not in colunas_identificadas:
-        mapeamento_colunas[col] = 'Saída'
-        colunas_identificadas.add('Saída')
-    elif 'dat' in col_lower and 'Data' not in colunas_identificadas:
-        mapeamento_colunas[col] = 'Data'
-        colunas_identificadas.add('Data')
-    elif 'prod' in col_lower and 'Produtor' not in colunas_identificadas:
-        mapeamento_colunas[col] = 'Produtor'
-        colunas_identificadas.add('Produtor')
-    elif ('cat' in col_lower or 'cult' in col_lower) and 'Categoria' not in colunas_identificadas:
-        mapeamento_colunas[col] = 'Categoria'
-        colunas_identificadas.add('Categoria')
+    if 'ent' in col_lower and 'Entrada' not in df_limpo.columns:
+        df_limpo['Entrada'] = pd.to_numeric(df.iloc[:, df.columns.get_loc(col)], errors='coerce').fillna(0)
+    elif ('sa' in col_lower or 'sai' in col_lower) and 'Saída' not in df_limpo.columns:
+        df_limpo['Saída'] = pd.to_numeric(df.iloc[:, df.columns.get_loc(col)], errors='coerce').fillna(0)
+    elif 'dat' in col_lower and 'Data' not in df_limpo.columns:
+        df_limpo['Data'] = df.iloc[:, df.columns.get_loc(col)].astype(str)
+    elif 'prod' in col_lower and 'Produtor' not in df_limpo.columns:
+        df_limpo['Produtor'] = df.iloc[:, df.columns.get_loc(col)].astype(str).str.strip()
+    elif ('cat' in col_lower or 'cult' in col_lower) and 'Categoria' not in df_limpo.columns:
+        df_limpo['Categoria'] = df.iloc[:, df.columns.get_loc(col)].astype(str).str.strip()
 
-df = df.rename(columns=mapeamento_colunas)
+# Se faltou alguma coluna essencial, criamos do zero na marra
+if 'Entrada' not in df_limpo.columns: df_limpo['Entrada'] = 0.0
+if 'Saída' not in df_limpo.columns: df_limpo['Saída'] = 0.0
+if 'Produtor' not in df_limpo.columns: df_limpo['Produtor'] = 'Não Informado'
+if 'Categoria' not in df_limpo.columns: df_limpo['Categoria'] = 'Não Informado'
 
-# Garante que as 4 colunas principais existam com nomes perfeitos no final
-for col_essencial in ['Entrada', 'Saída', 'Produtor', 'Categoria']:
-    if col_essencial not in df.columns:
-        df[col_essencial] = 0 if col_essencial in ['Entrada', 'Saída'] else 'Não Informado'
-
-# Tratamento dos formatos numéricos
-df["Entrada"] = pd.to_numeric(df["Entrada"], errors='coerce').fillna(0)
-df["Saída"] = pd.to_numeric(df["Saída"], errors='coerce').fillna(0)
-
-# Tratamento da Data
-if 'Data' in df.columns:
-    df["Data_Tratada"] = pd.to_datetime(df["Data"], errors='coerce')
-    if df["Data_Tratada"].isna().all():
-        df["Data_Tratada"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors='coerce')
-    df["Ano_Mes"] = df["Data_Tratada"].dt.to_period("M").astype(str)
+# Tratamento final do tempo baseado na nova tabela ultralimpa
+if 'Data' in df_limpo.columns:
+    df_limpo["Data_Tratada"] = pd.to_datetime(df_limpo["Data"], errors='coerce')
+    if df_limpo["Data_Tratada"].isna().all():
+        df_limpo["Data_Tratada"] = pd.to_datetime(df_limpo["Data"], format="%d/%m/%Y", errors='coerce')
+    df_limpo["Ano_Mes"] = df_limpo["Data_Tratada"].dt.to_period("M").astype(str)
 else:
-    df["Ano_Mes"] = "Sem Data"
+    df_limpo["Ano_Mes"] = "Sem Data"
 
-# Filtro integrado na barra lateral
+# Substitui o df original pelo df_limpo purificado
+df = df_limpo
+
+# --- FILTRO INTEGRADO ---
 st.sidebar.markdown("---")
 categorias = ["Todas as Categorias"] + list(df["Categoria"].dropna().unique())
 cat_sel = st.sidebar.selectbox("Filtrar Cultura:", categorias)
@@ -148,9 +128,11 @@ with aba_painel:
     fig_rosca.update_traces(textposition='inside', textinfo='percent')
     fig_rosca.update_layout(title="Divisão por Categoria de Operação", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
-    # Gráfico de Barras - 100% isolado e limpo agora
-    top_produtores = df.groupby("Produtor", as_index=False)["Entrada"].sum()
-    top_produtores = top_produtores[~top_produtores["Produtor"].astype(str).str.lower().str.contains("estoque|fato|não informado", na=True)]
+    # Gráfico de Barras - Agora usando agregação manual ultra segura
+    # Convertemos para dicionário primeiro para garantir 1D absoluto
+    dict_produtores = df.groupby("Produtor")["Entrada"].sum().to_dict()
+    top_produtores = pd.DataFrame(list(dict_produtores.items()), columns=["Produtor", "Entrada"])
+    top_produtores = top_produtores[~top_produtores["Produtor"].astype(str).str.lower().str.contains("estoque|fato|não informado|nan", na=True)]
     top_produtores = top_produtores.sort_values(by="Entrada", ascending=False).head(5)
     
     if not top_produtores.empty:
