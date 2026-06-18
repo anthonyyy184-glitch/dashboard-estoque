@@ -53,33 +53,48 @@ if arquivo_subido is not None:
 else:
     df = pd.read_csv("Base_Tabular_SQL.csv")
 
-# --- PADRONIZAÇÃO AUTOMÁTICA DE COLUNAS (Evita o erro de ficar parado) ---
-# Remove espaços antes/depois e deixa tudo em minúsculo para comparar fácil
+# --- DESDUPLICAÇÃO E PADRONIZAÇÃO DE COLUNAS ---
+# Se houver colunas duplicadas no arquivo, o pandas já coloca .1, .2 automaticamente no nome.
+# Vamos limpar espaços antes e depois.
 df.columns = df.columns.str.strip()
-mapeamento_colunas = {}
 
+mapeamento_colunas = {}
+colunas_identificadas = set()
+
+# Lógica inteligente para traduzir colunas evitando gerar nomes duplicados
 for col in df.columns:
     col_lower = col.lower()
-    if 'ent' in col_lower: mapeamento_colunas[col] = 'Entrada'
-    elif 'sa' in col_lower or 'sai' in col_lower: mapeamento_colunas[col] = 'Saída'
-    elif 'dat' in col_lower: mapeamento_colunas[col] = 'Data'
-    elif 'prod' in col_lower: mapeamento_colunas[col] = 'Produtor'
-    elif 'cat' in col_lower or 'cult' in col_lower: mapeamento_colunas[col] = 'Categoria'
+    
+    if 'ent' in col_lower and 'Entrada' not in colunas_identificadas:
+        mapeamento_colunas[col] = 'Entrada'
+        colunas_identificadas.add('Entrada')
+    elif ('sa' in col_lower or 'sai' in col_lower) and 'Saída' not in colunas_identificadas:
+        mapeamento_colunas[col] = 'Saída'
+        colunas_identificadas.add('Saída')
+    elif 'dat' in col_lower and 'Data' not in colunas_identificadas:
+        mapeamento_colunas[col] = 'Data'
+        colunas_identificadas.add('Data')
+    elif 'prod' in col_lower and 'Produtor' not in colunas_identificadas:
+        mapeamento_colunas[col] = 'Produtor'
+        colunas_identificadas.add('Produtor')
+    elif ('cat' in col_lower or 'cult' in col_lower) and 'Categoria' not in colunas_identificadas:
+        mapeamento_colunas[col] = 'Categoria'
+        colunas_identificadas.add('Categoria')
 
 df = df.rename(columns=mapeamento_colunas)
 
-# Garante que as colunas essenciais existam (se não existirem, cria com zero para não quebrar)
+# Garante que as colunas essenciais existam no dataframe final
 for col_essencial in ['Entrada', 'Saída', 'Produtor', 'Categoria']:
     if col_essencial not in df.columns:
         df[col_essencial] = 0 if col_essencial in ['Entrada', 'Saída'] else 'Não Informado'
 
-# Tratamento dos formatos
+# Tratamento dos formatos numéricos
 df["Entrada"] = pd.to_numeric(df["Entrada"], errors='coerce').fillna(0)
 df["Saída"] = pd.to_numeric(df["Saída"], errors='coerce').fillna(0)
 
+# Tratamento da Data
 if 'Data' in df.columns:
     df["Data_Tratada"] = pd.to_datetime(df["Data"], errors='coerce')
-    # Se falhar o formato padrão, tenta tratar os textos
     if df["Data_Tratada"].isna().all():
         df["Data_Tratada"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors='coerce')
     df["Ano_Mes"] = df["Data_Tratada"].dt.to_period("M").astype(str)
@@ -119,8 +134,10 @@ with aba_painel:
     fig_rosca.update_traces(textposition='inside', textinfo='percent')
     fig_rosca.update_layout(title="Divisão por Categoria de Operação", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
-    # Gráfico de Barras
-    top_produtores = df.groupby("Produtor")["Entrada"].sum().reset_index()
+    # Gráfico de Barras - Protegido contra erro de groupby unidimensional
+    # Garante que usamos apenas a coluna string 'Produtor' única
+    df_agrupado_prod = df[['Produtor', 'Entrada']].copy()
+    top_produtores = df_agrupado_prod.groupby("Produtor", as_index=False)["Entrada"].sum()
     top_produtores = top_produtores[~top_produtores["Produtor"].astype(str).str.lower().str.contains("estoque|fato|não informado", na=True)]
     top_produtores = top_produtores.sort_values(by="Entrada", ascending=False).head(5)
     
