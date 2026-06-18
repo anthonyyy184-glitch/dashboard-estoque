@@ -53,18 +53,32 @@ if arquivo_subido is not None:
 else:
     df = pd.read_csv("Base_Tabular_SQL.csv")
 
-# --- DESDUPLICAÇÃO E PADRONIZAÇÃO DE COLUNAS ---
-# Se houver colunas duplicadas no arquivo, o pandas já coloca .1, .2 automaticamente no nome.
-# Vamos limpar espaços antes e depois.
+# --- BLINDAGEM CONTRA COLUNAS REPETIDAS ---
+# Remove espaços extras dos nomes das colunas
 df.columns = df.columns.str.strip()
 
+# Renomeia colunas duplicadas na marra para não bugar o Pandas (ex: Produtor, Produtor_repetida_1)
+novos_nomes = []
+contagem_nomes = {}
+for col in df.columns:
+    if col in contagem_nomes:
+        contagem_nomes[col] += 1
+        novos_nomes.append(f"{col}_repetida_{contagem_nomes[col]}")
+    else:
+        contagem_nomes[col] = 0
+        novos_nomes.append(col)
+df.columns = novos_nomes
+
+# --- MAPEAMENTO E TRADUTOR INTELIGENTE ---
 mapeamento_colunas = {}
 colunas_identificadas = set()
 
-# Lógica inteligente para traduzir colunas evitando gerar nomes duplicados
 for col in df.columns:
     col_lower = col.lower()
-    
+    # Só mapeia se for a PRIMEIRA vez que encontra o termo e se não for uma coluna já marcada como repetida
+    if 'repetida' in col_lower:
+        continue
+        
     if 'ent' in col_lower and 'Entrada' not in colunas_identificadas:
         mapeamento_colunas[col] = 'Entrada'
         colunas_identificadas.add('Entrada')
@@ -83,7 +97,7 @@ for col in df.columns:
 
 df = df.rename(columns=mapeamento_colunas)
 
-# Garante que as colunas essenciais existam no dataframe final
+# Garante que as 4 colunas principais existam com nomes perfeitos no final
 for col_essencial in ['Entrada', 'Saída', 'Produtor', 'Categoria']:
     if col_essencial not in df.columns:
         df[col_essencial] = 0 if col_essencial in ['Entrada', 'Saída'] else 'Não Informado'
@@ -134,10 +148,8 @@ with aba_painel:
     fig_rosca.update_traces(textposition='inside', textinfo='percent')
     fig_rosca.update_layout(title="Divisão por Categoria de Operação", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
-    # Gráfico de Barras - Protegido contra erro de groupby unidimensional
-    # Garante que usamos apenas a coluna string 'Produtor' única
-    df_agrupado_prod = df[['Produtor', 'Entrada']].copy()
-    top_produtores = df_agrupado_prod.groupby("Produtor", as_index=False)["Entrada"].sum()
+    # Gráfico de Barras - 100% isolado e limpo agora
+    top_produtores = df.groupby("Produtor", as_index=False)["Entrada"].sum()
     top_produtores = top_produtores[~top_produtores["Produtor"].astype(str).str.lower().str.contains("estoque|fato|não informado", na=True)]
     top_produtores = top_produtores.sort_values(by="Entrada", ascending=False).head(5)
     
